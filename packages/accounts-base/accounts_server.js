@@ -233,13 +233,15 @@
   /// PUBLISHING DATA
   ///
 
-  // Always publish the current user's record to the client.
-  Meteor.publish(null, function() {
+  // Publish the current user's record to the client.
+  Meteor.publish("meteor.currentUser", function() {
     if (this.userId())
       return Meteor.users.find({_id: this.userId()},
                                {fields: {profile: 1, username: 1, emails: 1}});
-    else
+    else {
+      this.complete();
       return null;
+    }
   }, {is_auto: true});
 
   // If autopublish is on, also publish everyone else's user record.
@@ -252,7 +254,7 @@
   });
 
   // Publish all login service configuration fields other than secret.
-  Meteor.publish("loginServiceConfiguration", function () {
+  Meteor.publish("meteor.loginServiceConfiguration", function () {
     return Accounts.configuration.find({}, {fields: {secret: 0}});
   }, {is_auto: true}); // not techincally autopublish, but stops the warning.
 

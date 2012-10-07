@@ -24,37 +24,37 @@
 
 <template name="loginButtonsLoggedInDropdown">
   <div class="login-link-and-dropdown-list">
-    {{#if currentUser.loading}}
-    <div class="loading"></div>
+    {{#if currentUserLoading}}
+      <div class="loading"></div>
     {{else}}
-    <a class="login-link-text" id="login-name-link">
-      {{displayName}} ▾
-    </a>
-    {{#if dropdownVisible}}
-    <div id="login-dropdown-list" class="accounts-dialog">
-      <a class="login-close-text">Close</a>
-      <div class="login-close-text-clear"></div>
+      <a class="login-link-text" id="login-name-link">
+        {{displayName}} ▾
+      </a>
+      {{#if dropdownVisible}}
+      <div id="login-dropdown-list" class="accounts-dialog">
+        <a class="login-close-text">Close</a>
+        <div class="login-close-text-clear"></div>
 
-      {{#if inChangePasswordFlow}}
-      {{> loginButtonsChangePassword}}
-      {{else}}
-      {{#if allowChangingPassword}}
-      <div class="login-button" id="login-buttons-open-change-password">Change password</div>
+        {{#if inChangePasswordFlow}}
+        {{> loginButtonsChangePassword}}
+        {{else}}
+        {{#if allowChangingPassword}}
+        <div class="login-button" id="login-buttons-open-change-password">Change password</div>
+        {{/if}}
+        <div class="login-button" id="login-buttons-logout">Logout</div>
+        {{/if}}
+      </div>
       {{/if}}
-      <div class="login-button" id="login-buttons-logout">Logout</div>
-      {{/if}}
-    </div>
-    {{/if}}
     {{/if}}
   </div>
 </template>
 
 <template name="loginButtonsLoggedInRow">
   <div class="login-header">
-    {{#if currentUser.loading}}
-    <div class="loading"></div>
+    {{#if currentUserLoading}}
+      <div class="loading"></div>
     {{else}}
-    {{displayName}}
+      {{displayName}}
     {{/if}}
   </div>
   <div class="login-button" id="login-buttons-logout">Logout</div>

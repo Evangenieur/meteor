@@ -4,21 +4,13 @@
     return Meteor.default_connection.userId();
   };
 
+  // Only call this in a context where you've already checked
+  // Meteor.userLoading().
   Meteor.user = function () {
     var userId = Meteor.userId();
-    if (userId) {
-      var result = Meteor.users.findOne(userId);
-      if (result) {
-        return result;
-      } else {
-        // If the login method completes but new subcriptions haven't
-        // yet been sent down to the client, this is the best we can
-        // do
-        return {_id: userId, loading: true};
-      }
-    } else {
+    if (!userId)
       return null;
-    }
+    return Meteor.users.findOne(userId);
   };
 
   Meteor.logout = function (callback) {
@@ -32,11 +24,17 @@
     });
   };
 
-  // If we're using Handlebars, register the {{currentUser}} global
-  // helper
+  // If we're using Handlebars, register the {{currentUser}} and
+  // {{currentUserLoading}} global helpers.
   if (window.Handlebars) {
     Handlebars.registerHelper('currentUser', function () {
+      // This lets us do "{{#if currentUser}}" outside of "{{#if
+      // currentUserLoading}}".
+      if (Meteor.userLoading()) return true;
       return Meteor.user();
+    });
+    Handlebars.registerHelper('currentUserLoading', function () {
+      return Meteor.userLoading();
     });
   }
 
@@ -44,7 +42,7 @@
   // https://github.com/meteor/meteor/pull/273
   var loginServicesConfigured = false;
   var loginServicesConfiguredListeners = new Meteor.deps._ContextSet;
-  Meteor.subscribe("loginServiceConfiguration", function () {
+  Meteor.subscribe("meteor.loginServiceConfiguration", function () {
     loginServicesConfigured = true;
     loginServicesConfiguredListeners.invalidateAll();
   });

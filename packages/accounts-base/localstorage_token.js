@@ -3,6 +3,14 @@
   var loginTokenKey = "Meteor.loginToken";
   var userIdKey = "Meteor.userId";
 
+  // Call this from the top level of the test file for any test that does
+  // logging in and out, to protect multiple tabs running the same tests
+  // simultaneously from interfering with each others' localStorage.
+  Accounts._isolateLoginTokenForTest = function () {
+    loginTokenKey = loginTokenKey + Meteor.uuid();
+    userIdKey = userIdKey + Meteor.uuid();
+  };
+
   Accounts._storeLoginToken = function(userId, token) {
     localStorage.setItem(userIdKey, userId);
     localStorage.setItem(loginTokenKey, token);
@@ -29,10 +37,23 @@
     return localStorage.getItem(userIdKey);
   };
 
+  var userLoadingListeners = new Meteor.deps._ContextSet;
+  var currentUserSubscriptionData;
+
+  Meteor.userLoading = function () {
+    userLoadingListeners.addCurrentContext();
+    return currentUserSubscriptionData && currentUserSubscriptionData.loading;
+  };
+
   Accounts._makeClientLoggedOut = function() {
     Accounts._unstoreLoginToken();
     Meteor.default_connection.setUserId(null);
     Meteor.default_connection.onReconnect = null;
+    userLoadingListeners.invalidateAll();
+    if (currentUserSubscriptionData) {
+      currentUserSubscriptionData.handle.stop();
+      currentUserSubscriptionData = null;
+    }
   };
 
   Accounts._makeClientLoggedIn = function(userId, token) {
@@ -48,6 +69,20 @@
         }
       });
     };
+    userLoadingListeners.invalidateAll();
+    if (currentUserSubscriptionData) {
+      currentUserSubscriptionData.handle.stop();
+    }
+    var data = currentUserSubscriptionData = {loading: true};
+    data.handle = Meteor.subscribe(
+      "meteor.currentUser", function () {
+        // Important! We use "data" here, not "currentUserSubscriptionData", so
+        // that if we log out and in again before this subscription is ready, we
+        // don't make currentUserSubscriptionData look ready just because this
+        // older iteration of subscribing is ready.
+        data.loading = false;
+        userLoadingListeners.invalidateAll();
+      });
   };
 })();
 
