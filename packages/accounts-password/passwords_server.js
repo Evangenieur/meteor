@@ -85,8 +85,12 @@
           !verifier.verifier)
         throw new Meteor.Error(400, "Invalid verifier");
 
+      // XXX this should invalidate all login tokens other than the current one
+      // (or it should assign a new login token, replacing existing ones)
       Meteor.users.update({_id: this.userId()},
                           {$set: {'services.password.srp': verifier}});
+
+      // XXX should this clear srpChallenge from _sessionData?
 
       var ret = {passwordChanged: true};
       if (serialized)
@@ -130,16 +134,22 @@
       if (!user)
         throw new Meteor.Error(403, "Token expired");
 
+      // Generate a new login token, which replaces all existing ones (changing
+      // password should invalidate existing sessions).
+      var loginToken = Meteor.uuid();
+
       Meteor.users.update({_id: user._id}, {
-        $set: {'services.password.srp': newVerifier},
+        $set: {'services.password.srp': newVerifier,
+               'services.resume.loginTokens': [loginToken]},
         $unset: {'services.password.reset': 1}
       });
       // verify their email. they got the password reset email.
+      // XXX why is this a separate update?
+      // XXX we should store the email in used in services.password.reset so
+      // that we validate the correct email here, not the first one
       Meteor.users.update({_id: user._id},
                           {$set: {"emails.0.validated": true}});
 
-
-      var loginToken = Accounts._loginTokens.insert({userId: user._id});
       this.setUserId(user._id);
       return {token: loginToken, id: user._id};
     },
@@ -155,14 +165,15 @@
       var userId = tokenDocument.userId;
       var email = tokenDocument.email;
 
+      var loginToken = Meteor.uuid();
       // update the validated flag on the index in the emails array
       // matching email (see
       // http://www.mongodb.org/display/DOCS/Updating/#Updating-The%24positionaloperator)
       Meteor.users.update({_id: userId, "emails.address": email},
-                          {$set: {"emails.$.validated": true}});
+                          {$set: {"emails.$.validated": true},
+                           $push: {"services.resume.loginTokens": loginToken}});
       Accounts._emailValidationTokens.remove({token: token});
 
-      var loginToken = Accounts._loginTokens.insert({userId: userId});
       this.setUserId(userId);
       return {token: loginToken, id: userId};
     }
@@ -232,13 +243,13 @@
       throw new Meteor.Error(403, "Incorrect password");
 
     var userId = serialized.userId;
-    var loginToken = Accounts._loginTokens.insert({userId: userId});
-
-    // XXX we should remove srpChallenge documents from mongo, but we
-    // need to make sure reconnects still work (meaning we can't
-    // remove them right after they've been used). This will also be
-    // fixed if we store challenges in session.
-    // https://app.asana.com/0/988582960612/1278583012594
+    var user = Meteor.users.findOne(userId);
+    // Was the user deleted since the start of this challenge?
+    if (!user)
+      throw new Meteor.Error(403, "User not found");
+    var loginToken = Meteor.uuid();
+    Meteor.users.update(userId,
+                        {$push: {'services.resume.loginTokens': loginToken}});
 
     return {token: loginToken, id: userId, HAMK: serialized.HAMK};
   });
@@ -273,7 +284,10 @@
     if (verifier.verifier !== newVerifier.verifier)
       throw new Meteor.Error(403, "Incorrect password");
 
-    var loginToken = Accounts._loginTokens.insert({userId: user._id});
+    var loginToken = Meteor.uuid();
+    Meteor.users.update(user._id,
+                        {$push: {'services.resume.loginTokens': loginToken}});
+
     return {token: loginToken, id: user._id};
   });
 

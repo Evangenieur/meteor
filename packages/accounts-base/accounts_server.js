@@ -58,14 +58,14 @@
   // support reconnecting using a meteor login token
   Accounts.registerLoginHandler(function(options) {
     if (options.resume) {
-      var loginToken = Accounts._loginTokens
-            .findOne({_id: options.resume});
-      if (!loginToken)
+      var user = Meteor.users.findOne(
+        {"services.resume.loginTokens": options.resume});
+      if (!user)
         throw new Meteor.Error(403, "Couldn't find login token");
 
       return {
-        token: loginToken._id,
-        id: loginToken.userId
+        token: options.resume,
+        id: user._id
       };
     } else {
       return undefined;
@@ -164,9 +164,17 @@
         throw new Meteor.Error(403, "Email already exists.");
     }
 
-    var result = {id: Meteor.users.insert(fullUser)};
-    if (options.generateLoginToken)
-      result.token = Accounts._loginTokens.insert({userId: result.id});
+    var result = {};
+    if (options.generateLoginToken) {
+      result.token = Meteor.uuid();
+      Meteor._ensure(fullUser, 'services', 'resume');
+      if (_.has(fullUser.services.resume, 'loginTokens'))
+        fullUser.services.resume.loginTokens.push(result.token);
+      else
+        fullUser.services.resume.loginTokens = [result.token];
+    }
+
+    result.id = Meteor.users.insert(fullUser);
 
     return result;
   };
@@ -212,19 +220,22 @@
       // don't overwrite existing fields
       // XXX subobjects (aka 'profile', 'services')?
       var newKeys = _.difference(_.keys(extra), _.keys(user));
-      if (!_.isEmpty(newKeys)) {
-        var newAttrs = _.pick(extra, newKeys);
-        Meteor.users.update(user._id, {$set: newAttrs});
-      }
-      return {id: user._id,
-              token: Accounts._loginTokens.insert({userId: user._id})};
+      var newAttrs = _.pick(extra, newKeys);
+      var result = {token: Meteor.uuid()};
+      Meteor.users.update(
+        user._id,
+        {$set: newAttrs, $push: {'services.resume.loginTokens': result.token}});
+      result.id = user._id;
+      return result;
     } else {
-      // Create a new user
+      // Create a new user. The "options" argument to onCreateUserHook should
+      // not contain the loginToken (because it wasn't part of the creation
+      // request) but the user should.
       var servicesClause = {};
       servicesClause[serviceName] = serviceData;
-      user = {services: servicesClause};
-      return Accounts.insertUserDoc(
-        {services: servicesClause, generateLoginToken: true}, extra, user);
+      var insertOptions = {services: servicesClause, generateLoginToken: true};
+      user = {services: JSON.parse(JSON.stringify(servicesClause))};
+      return Accounts.insertUserDoc(insertOptions, extra, user);
     }
   };
 
